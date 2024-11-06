@@ -71,6 +71,9 @@ class buoyancyTurbSource
         //- Thermal expansion coefficient [1/K]
         dimensionedScalar beta_;
 
+        //- Intervser turbulent Prandtl number
+        scalar Cg_; 
+
         //- Gravitational acceleration vector [m/s^2]
         const uniformDimensionedVectorField& g_;
 
@@ -83,16 +86,17 @@ class buoyancyTurbSource
         void readCoeffs();
 
         //- Compute buoyancy production term for incompressible cases [m2/s3]
-        tmp<volScalarField> B() const;
+        tmp<volScalarField> B(const volScalarField& rho) const;
+        /* volScalarField B() const; */
 
         //- Apply buoyancyTurbSource to epsilon field
-        void buoyancyTurbSourceEpsilon(fvMatrix<scalar>& eqn) const;
+        void buoyancyTurbSourceEpsilon(const volScalarField& rho, fvMatrix<scalar>& eqn) const;
 
         //- Apply buoyancyTurbSource to omega field
-        void buoyancyTurbSourceOmega(fvMatrix<scalar>& eqn) const;
+        void buoyancyTurbSourceOmega(const volScalarField& rho, fvMatrix<scalar>& eqn) const;
 
         //- Apply buoyancyTurbSource to k field
-        void buoyancyTurbSourceK(fvMatrix<scalar>& eqn) const;
+        void buoyancyTurbSourceK(const volScalarField& rho, fvMatrix<scalar>& eqn) const;
 
 public:
 
@@ -116,7 +120,11 @@ public:
     // Member Functions
 
         //- Add explicit source term to k, epsilon, or omega equation
-        virtual void addSup(fvMatrix<scalar>& eqn, const word& fieldName) const override;
+        /* virtual void addSup(fvMatrix<scalar>& eqn, const word& fieldName) const override; */
+        virtual void addSup(
+                const volScalarField& rho,
+                fvMatrix<scalar>& eqn, 
+                const word& fieldName) const override;
 
         //- Return the list of fields for which the fvModel adds source term
         virtual wordList addSupFields() const override;
