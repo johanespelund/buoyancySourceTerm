@@ -49,15 +49,17 @@ void Foam::fv::buoyancyTurbSource::readCoeffs()
     alphatName_ = coeffs().lookupOrDefault<word>("alphat", "alphat");
     Tname_ = coeffs().lookupOrDefault<word>("T", "T");
     Cg_ = coeffs().lookupOrDefault<scalar>("Cg", 1/0.85);
+    scalar beta_temp_ = coeffs().lookupOrDefault<scalar>("beta", -1);
 
     if (coeffs().found("beta"))
     {
-        beta_ = coeffs().lookup<dimensionedScalar>("beta");
-        Info << "  Using beta = " << beta_ << " for buoyancy source term." << nl;
+        beta_ = dimensionedScalar("beta", dimless/dimTemperature, beta_temp_);
+        Info << "  Using beta = " << beta_.value() << " for buoyancy source term." << nl;
     }
     else
     {
         Info << "  No beta found. Using rho for buoyancy source term." << nl;
+        beta_ = dimensionedScalar("beta", dimless/dimTemperature, -1);
     }
 }
 
@@ -66,9 +68,9 @@ Foam::tmp<Foam::volScalarField> Foam::fv::buoyancyTurbSource::B(const volScalarF
 
     const auto& g = mesh().lookupObject<uniformDimensionedVectorField>("g");
     const auto& nut = turbulence_.nut();
+    const volScalarField& k = turbulence_.k();
+    auto k0 = dimensionedScalar("k0", k.dimensions(), SMALL);
 
-    Foam::tmp<Foam::volVectorField> gradRhoTmp = fvc::grad(rho);
-    const Foam::volVectorField& gradRho = gradRhoTmp();
     return tmp<Foam::volScalarField> 
     (
         new Foam::volScalarField
@@ -81,7 +83,7 @@ Foam::tmp<Foam::volScalarField> Foam::fv::buoyancyTurbSource::B(const volScalarF
                 IOobject::NO_READ,
                 IOobject::NO_WRITE
             ),
-            nut() * Cg_ * (gradRho & g)  // Computed buoyancy source expression
+            nut() * Cg_ * (g & fvc::grad(rho) )/(k + k0)  // Computed buoyancy source expression
         )
     );
 }
@@ -94,10 +96,7 @@ void Foam::fv::buoyancyTurbSource::buoyancyTurbSourceEpsilon(const volScalarFiel
 {
     const dictionary& turbDict = turbulence_.coeffDict();
     const dimensionedScalar C1(turbDict.lookupOrDefault<scalar>("C1", 1.44));
-    const volScalarField& epsilon = eqn.psi();
-    const volScalarField& k = turbulence_.k();
     const volVectorField& U = turbulence_.U();
-    const dimensionedScalar k0(k.dimensions(), SMALL);
 
     // (BMA:Eq. 9)
     const vector gHat(g_.value()/mag(g_.value()));
@@ -112,14 +111,7 @@ void Foam::fv::buoyancyTurbSource::buoyancyTurbSourceEpsilon(const volScalarFiel
     // (BMA:Eq. 6)
     const volScalarField _B = B(rho);
 
-    Foam::volScalarField vSafe = Foam::max(v, dimensionedScalar("vMin", v.dimensions(), SMALL));
-    Foam::volScalarField uvRatio = u / vSafe;
-    Foam::volScalarField uvMagnitude = mag(uvRatio);
-    Foam::volScalarField tanhPart = tanh(uvMagnitude);
-    Foam::volScalarField adjustedBuoyancySource = C1 * tanhPart * _B;
-    
-    eqn -= fvm::SuSp(adjustedBuoyancySource/(k + k0), epsilon);
-    /* eqn -= fvm::SuSp(C1*tanh(mag(u/v))*_B/(k + k0), epsilon); */
+    eqn -= fvm::SuSp(C1*tanh(mag(v)/u)*_B, eqn.psi());
 }
 
 
@@ -127,11 +119,11 @@ void Foam::fv::buoyancyTurbSource::buoyancyTurbSourceEpsilon(const volScalarFiel
 void Foam::fv::buoyancyTurbSource::buoyancyTurbSourceOmega(const volScalarField&rho, fvMatrix<scalar>& eqn) const
 {
     const volScalarField& nut = turbulence_.nut();
+    const volScalarField& k = turbulence_.k();
     const scalar gamma = 0.52;
     const volScalarField _B = B(rho);
 
-    eqn -= gamma  / (nut + dimensionedScalar(nut.dimensions(), SMALL)) * _B;
-    /* eqn -= fvm::SuSp(gamma * k / (nut + dimensionedScalar(nut.dimensions(), SMALL)) * _B/eqn.psi(), eqn.psi()); */
+    eqn -= gamma*k  / (nut + dimensionedScalar(nut.dimensions(), SMALL)) * _B;
 }
 
 
@@ -142,7 +134,7 @@ void Foam::fv::buoyancyTurbSource::buoyancyTurbSourceK(const volScalarField&rho,
     const dimensionedScalar k0(k.dimensions(), SMALL);
     const volScalarField _B = B(rho);
 
-    eqn -= fvm::SuSp(_B/(k + k0), k);
+    eqn -= fvm::SuSp(_B, k);
 }
 
 
@@ -201,7 +193,7 @@ Foam::fv::buoyancyTurbSource::buoyancyTurbSource
 )
 :
     fvModel(name, modelType, mesh, dict),
-    beta_(dimensionedScalar("beta", dimless/dimTemperature, 3.3e-3)),
+    beta_(dimensionedScalar("beta", dimless/dimTemperature, -1)),
     g_(mesh.lookupObject<uniformDimensionedVectorField>("g")),
     turbulence_(mesh.lookupType<momentumTransportModel>())
 {
