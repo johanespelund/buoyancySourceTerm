@@ -59,17 +59,12 @@ class buoyancyTurbSource
         //- Flag indicating if epsilon or omega model is used
         bool isEpsilon_;
 
-        //- Name of the density field
-        word rhoName_;
+        //- Flag indicatin if source term should only be added to k eqn.
+        bool onlyApplyToK_; 
 
-        //- Name of the turbulent thermal conductivity field
-        word alphatName_;
-
-        //- Name of the temperature field
-        word Tname_;
 
         //- Thermal expansion coefficient [1/K]
-        dimensionedScalar beta_;
+        /*dimensionedScalar beta_;*/
 
         //- Intervser turbulent Prandtl number
         scalar Cg_; 
