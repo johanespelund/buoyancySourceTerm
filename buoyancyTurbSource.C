@@ -45,23 +45,13 @@ namespace fv
 
 void Foam::fv::buoyancyTurbSource::readCoeffs()
 {
-    /*rhoName_ = coeffs().lookupOrDefault<word>("rho", "rho");*/
-    /*alphatName_ = coeffs().lookupOrDefault<word>("alphat", "alphat");*/
-    /*Tname_ = coeffs().lookupOrDefault<word>("T", "T");*/
     Cg_ = coeffs().lookupOrDefault<scalar>("Cg", 1/0.85);
     onlyApplyToK_ = coeffs().lookupOrDefault<bool>("onlyApplyToK", false);
-    /*scalar beta_temp_ = coeffs().lookupOrDefault<scalar>("beta", -1);*/
+    THFM_ = coeffs().lookupOrDefault<word>("THFM", "SGDH");
 
-    /*if (coeffs().found("beta"))*/
-    /*{*/
-    /*    beta_ = dimensionedScalar("beta", dimless/dimTemperature, beta_temp_);*/
-    /*    Info << "  Using beta = " << beta_.value() << " for buoyancy source term." << nl;*/
-    /*}*/
-    /*else*/
-    /*{*/
-    /*    Info << "  No beta found. Using rho for buoyancy source term." << nl;*/
-    /*    beta_ = dimensionedScalar("beta", dimless/dimTemperature, -1);*/
-    /*}*/
+    Info << "   Cg / Prt: " << Cg_ << " / " << 1/Cg_ << endl;
+    Info << "   onlyApplyToK: " << onlyApplyToK_ << endl;
+    Info << "   THFM: " << THFM_ << endl;
 }
 
 Foam::tmp<Foam::volScalarField> Foam::fv::buoyancyTurbSource::B(const volScalarField&rho) const
@@ -69,8 +59,64 @@ Foam::tmp<Foam::volScalarField> Foam::fv::buoyancyTurbSource::B(const volScalarF
 
     const auto& g = mesh().lookupObject<uniformDimensionedVectorField>("g");
     const auto& nut = turbulence_.nut();
-    /*const volScalarField& k = turbulence_.k();*/
+    const auto& R = turbulence_.sigma();
+    const volScalarField& k = turbulence_.k();
+    const volScalarField& epsilon = turbulence_.epsilon();
+    /* scalar epsilonMin_ = turbulence_.epsilonMin(); */
     /*auto k0 = dimensionedScalar("k0", k.dimensions(), SMALL);*/
+    /* volSymmTensorField R = ((2.0/3.0)*I)*k - (nut)*dev(twoSymm(fvc::grad(turbulence_.U()))); */
+
+    /* Info << "   Calculating buoyancy source term." << endl; */
+
+    /* volScalarField G = 0.9*(k/epsilon)*(R() & g & fvc::grad(rho)); // /(epsilon + SMALL) // GGDH */
+    /* volScalarField G = (3/2)*Cg_*(nut()/k)*(R() & g & fvc::grad(rho)); // /(epsilon + SMALL) // GGDH */
+
+    /* Info << "   Calculated buoyancy source term." << endl; */
+
+
+    // Create vol fields that can be written for G as well
+    
+    /* Info << "   Writing buoyancy source term." << endl; */
+    /* Foam::volScalarField Gvector */
+    /* ( */
+    /*     IOobject */
+    /*     ( */
+    /*         "buoyancySourceVector", */
+    /*         mesh().time().timeName(), */
+    /*         mesh(), */
+    /*         IOobject::NO_READ, */
+    /*         IOobject::NO_WRITE */
+    /*     ), */
+    /*     0.9*(k/epsilon)*(R() & g & fvc::grad(rho)) // /(epsilon + SMALL) // GGDH */
+    /* ); */
+
+    /* if (mesh().time().writeTime()) */
+    /* { */
+    /*     Gvector.write(); */
+    /* } */
+
+    /* Info << "   Writing R tensor." << endl; */
+    /* // Same for R */
+    /* Foam::volSymmTensorField Rvector */
+    /* ( */
+    /*     IOobject */
+    /*     ( */
+    /*         "Rvector", */
+    /*         mesh().time().timeName(), */
+    /*         mesh(), */
+    /*         IOobject::NO_READ, */
+    /*         IOobject::NO_WRITE */
+    /*     ), */
+    /*     /1* ((2.0/3.0)*I)*k - (nut)*dev(twoSymm(fvc::grad(turbulence_.U()))) *1/ */
+    /*     R() */
+    /* ); */
+    
+    /* if (mesh().time().writeTime()) */
+    /* { */
+    /*     Rvector.write(); */
+    /* } */
+    
+    /* Info << "Returning buoyancy source term." << endl; */
 
     return tmp<Foam::volScalarField> 
     (
@@ -84,8 +130,11 @@ Foam::tmp<Foam::volScalarField> Foam::fv::buoyancyTurbSource::B(const volScalarF
                 IOobject::NO_READ,
                 IOobject::NO_WRITE
             ),
-            /*nut() * Cg_ * (g & fvc::grad(rho) )/(k + k0)  // Computed buoyancy source expression*/
-            nut() * Cg_ * (g & fvc::grad(rho) )   // Computed buoyancy source expression
+            THFM_ == "SGDH" ? 
+            nut() * Cg_ * (g & fvc::grad(rho))  // SGDH
+            :   
+            (3/2)*Cg_*(nut()/k)*(R() & g & fvc::grad(rho)) // /(epsilon + SMALL) // GGDH
+            /* 0.9*(k/epsilon)*(R() & g & fvc::grad(rho)) // /(epsilon + SMALL) // GGDH */
         )
     );
 }
@@ -140,9 +189,27 @@ void Foam::fv::buoyancyTurbSource::buoyancyTurbSourceK(const volScalarField&rho,
     const dimensionedScalar k0(k.dimensions(), SMALL);
     const volScalarField _B = B(rho);
 
+    // Write the field to disk
+    /* _B().write(); */
+    // but only when time = writeTime!
+    if (mesh().time().writeTime())
+    {
+        _B().write();
+    }
+
     eqn -= fvm::SuSp(_B/(k + k0), k);
 }
 
+// Apply source term to f equation
+void Foam::fv::buoyancyTurbSource::buoyancyTurbSourcef(const volScalarField&rho, fvMatrix<scalar>& eqn) const
+{
+    const volScalarField& k = eqn.psi();
+    const dimensionedScalar k0(k.dimensions(), SMALL);
+    const volScalarField _B = B(rho);
+    const scalar C2 = 0.3;
+
+    eqn += C2*(_B/pow(k + k0,2), k);
+}
 
 // * * * * * * * * * * * * * * * Member Functions  * * * * * * * * * * * * * //
 
@@ -162,6 +229,10 @@ void Foam::fv::buoyancyTurbSource::addSup(
     else if (!isEpsilon_ && fieldName == "omega")
     {
         buoyancyTurbSourceOmega(rho, eqn);
+    }
+    else if (isv2f_ && fieldName == "f")
+    {
+        buoyancyTurbSourcef(rho, eqn);
     }
     else
     {
@@ -184,6 +255,12 @@ Foam::wordList Foam::fv::buoyancyTurbSource::addSupFields() const
         fields.append("omega");
         Info << "   Adding buoyancy source to omega equation." << endl;
     }
+    if (isv2f_ && !onlyApplyToK_)
+    {
+        fields.append("f");
+        Info << "   Adding buoyancy source to v2-f model." << endl;
+    }
+
     fields.append("k");
 
     return fields;
@@ -222,6 +299,17 @@ Foam::fv::buoyancyTurbSource::buoyancyTurbSource
             << "Unable to find an omega or epsilon field." << nl
             << "buoyancyTurbSource requires an omega- or epsilon-based model."
             << exit(FatalError);
+    }
+    // Check for v2 and f fields to set isv2f_.
+    if (mesh.foundObject<volScalarField>("v2") &&
+        mesh.foundObject<volScalarField>("f"))
+    {
+        isv2f_ = true;
+        Info << "   Found v2 and f fields. Assuming v2-f model." << endl;
+    }
+    else
+    {
+        isv2f_ = false;
     }
 }
 

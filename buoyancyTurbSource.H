@@ -59,15 +59,19 @@ class buoyancyTurbSource
         //- Flag indicating if epsilon or omega model is used
         bool isEpsilon_;
 
-        //- Flag indicatin if source term should only be added to k eqn.
+        //- Flag indicating if the v2f model is used
+        bool isv2f_;
+
+        //- Flag indicating if source term should only be added to k eqn.
         bool onlyApplyToK_; 
 
-
-        //- Thermal expansion coefficient [1/K]
-        /*dimensionedScalar beta_;*/
-
-        //- Intervser turbulent Prandtl number
+        //- Inverse turbulent Prandtl number
         scalar Cg_; 
+
+        //- Turbulent heat flux model (THFM) type.
+        //  Eiter SGDH (simple gradient diffusion hypothesis, default) or
+        //  or GGDH (generalized gradient diffusion hypothesis).
+        word THFM_;
 
         //- Gravitational acceleration vector [m/s^2]
         const uniformDimensionedVectorField& g_;
@@ -92,6 +96,9 @@ class buoyancyTurbSource
 
         //- Apply buoyancyTurbSource to k field
         void buoyancyTurbSourceK(const volScalarField& rho, fvMatrix<scalar>& eqn) const;
+
+        //- Apply buoyancyTurbSource to f field
+        void buoyancyTurbSourcef(const volScalarField& rho, fvMatrix<scalar>& eqn) const;
 
 public:
 
