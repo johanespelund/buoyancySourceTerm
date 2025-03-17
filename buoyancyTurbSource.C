@@ -62,61 +62,6 @@ Foam::tmp<Foam::volScalarField> Foam::fv::buoyancyTurbSource::B(const volScalarF
     const auto& R = turbulence_.sigma();
     const volScalarField& k = turbulence_.k();
     const volScalarField& epsilon = turbulence_.epsilon();
-    /* scalar epsilonMin_ = turbulence_.epsilonMin(); */
-    /*auto k0 = dimensionedScalar("k0", k.dimensions(), SMALL);*/
-    /* volSymmTensorField R = ((2.0/3.0)*I)*k - (nut)*dev(twoSymm(fvc::grad(turbulence_.U()))); */
-
-    /* Info << "   Calculating buoyancy source term." << endl; */
-
-    /* volScalarField G = 0.9*(k/epsilon)*(R() & g & fvc::grad(rho)); // /(epsilon + SMALL) // GGDH */
-    /* volScalarField G = (3/2)*Cg_*(nut()/k)*(R() & g & fvc::grad(rho)); // /(epsilon + SMALL) // GGDH */
-
-    /* Info << "   Calculated buoyancy source term." << endl; */
-
-
-    // Create vol fields that can be written for G as well
-    
-    /* Info << "   Writing buoyancy source term." << endl; */
-    /* Foam::volScalarField Gvector */
-    /* ( */
-    /*     IOobject */
-    /*     ( */
-    /*         "buoyancySourceVector", */
-    /*         mesh().time().timeName(), */
-    /*         mesh(), */
-    /*         IOobject::NO_READ, */
-    /*         IOobject::NO_WRITE */
-    /*     ), */
-    /*     0.9*(k/epsilon)*(R() & g & fvc::grad(rho)) // /(epsilon + SMALL) // GGDH */
-    /* ); */
-
-    /* if (mesh().time().writeTime()) */
-    /* { */
-    /*     Gvector.write(); */
-    /* } */
-
-    /* Info << "   Writing R tensor." << endl; */
-    /* // Same for R */
-    /* Foam::volSymmTensorField Rvector */
-    /* ( */
-    /*     IOobject */
-    /*     ( */
-    /*         "Rvector", */
-    /*         mesh().time().timeName(), */
-    /*         mesh(), */
-    /*         IOobject::NO_READ, */
-    /*         IOobject::NO_WRITE */
-    /*     ), */
-    /*     /1* ((2.0/3.0)*I)*k - (nut)*dev(twoSymm(fvc::grad(turbulence_.U()))) *1/ */
-    /*     R() */
-    /* ); */
-    
-    /* if (mesh().time().writeTime()) */
-    /* { */
-    /*     Rvector.write(); */
-    /* } */
-    
-    /* Info << "Returning buoyancy source term." << endl; */
 
     return tmp<Foam::volScalarField> 
     (
@@ -134,7 +79,6 @@ Foam::tmp<Foam::volScalarField> Foam::fv::buoyancyTurbSource::B(const volScalarF
             nut() * Cg_ * (g & fvc::grad(rho))  // SGDH
             :   
             (3/2)*Cg_*(nut()/k)*(R() & g & fvc::grad(rho)) // /(epsilon + SMALL) // GGDH
-            /* 0.9*(k/epsilon)*(R() & g & fvc::grad(rho)) // /(epsilon + SMALL) // GGDH */
         )
     );
 }
@@ -172,13 +116,10 @@ void Foam::fv::buoyancyTurbSource::buoyancyTurbSourceEpsilon(const volScalarFiel
 void Foam::fv::buoyancyTurbSource::buoyancyTurbSourceOmega(const volScalarField&rho, fvMatrix<scalar>& eqn) const
 {
     const volScalarField& nut = turbulence_.nut();
-    /*const volScalarField& k = turbulence_.k();*/
-    /*const volScalarField& omega = turbul*/
     const scalar gamma = 0.52;
     const volScalarField _B = B(rho);
 
     eqn -= gamma  / (nut + dimensionedScalar(nut.dimensions(), SMALL)) * _B;
-    /*eqn -= fvm::SuSp(gamma  / (nut + dimensionedScalar(nut.dimensions(), SMALL)) * _B, eqn.psi());*/
 }
 
 
@@ -189,14 +130,10 @@ void Foam::fv::buoyancyTurbSource::buoyancyTurbSourceK(const volScalarField&rho,
     const dimensionedScalar k0(k.dimensions(), SMALL);
     const volScalarField _B = B(rho);
 
-    // Write the field to disk
-    /* _B().write(); */
-    // but only when time = writeTime!
     if (mesh().time().writeTime())
     {
         _B().write();
     }
-
     eqn -= fvm::SuSp(_B/(k + k0), k);
 }
 
