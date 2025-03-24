@@ -25,9 +25,29 @@ Class
     Foam::fv::buoyancyTurbSource
 
 Description
-    Applies a source term to the turbulence model equations (k, epsilon, omega)
-    to account for buoyancy effects in incompressible, compressible, and 
-    multiphase flows.
+    Applies a buoyance production term to the turbulence transport equations.
+    The user can choose between SGDH (simple gradient diffusion hypothesis)
+    and GGDH (generalized gradient diffusion hypothesis) for the turbulent
+    heat flux model (THFM).
+
+    The term is always added to the k equation. The user can choose to add
+    the term to the epsilon, omega and f equations as well.
+
+
+    [2] Ince, N. Z., and B. E. Launder. 1989. “On the Computation of
+    Buoyancy-Driven Turbulent Flows in Rectangular Enclosures.” International
+    Journal of Heat and Fluid Flow 10 (2): 110–17.
+    https://doi.org/10.1016/0142-727X(89)90003-9.
+
+    [3] Tieszen, S, A Ooi, P Durbin, and M Behnia. 1998. “Modeling of Natural
+    Convection Heat Transfer.” Proceedings of the Summer Program.
+
+    [4]       Katsamis, Constantinos, Tim Craft, Hector Iacovides, and Juan C.
+    Uribe. 2022. “Use of 2-D and 3-D Unsteady RANS in the Computation of Wall
+    Bounded Buoyant Flows.” International Journal of Heat and Fluid Flow 93
+    (February):108914. https://doi.org/10.1016/j.ijheatfluidflow.2021.108914.
+
+
 
 SourceFiles
     buoyancyTurbSource.C
@@ -40,6 +60,8 @@ SourceFiles
 #include "fvModel.H"
 #include "compressibleMomentumTransportModel.H"
 #include "uniformDimensionedFields.H"
+#include "v2f.H"
+#include "RASModel.H"
 
 namespace Foam
 {
@@ -68,6 +90,9 @@ class buoyancyTurbSource
         //- Inverse turbulent Prandtl number
         scalar Cg_; 
 
+        //- Coefficient for the buoyancy production term in GGDH
+        scalar Cphi_;
+
         //- Turbulent heat flux model (THFM) type.
         //  Eiter SGDH (simple gradient diffusion hypothesis, default) or
         //  or GGDH (generalized gradient diffusion hypothesis).
@@ -77,7 +102,9 @@ class buoyancyTurbSource
         const uniformDimensionedVectorField& g_;
 
         //- Reference to the turbulence model
-        const momentumTransportModel& turbulence_;
+        const compressibleMomentumTransportModel& turbulence_;
+
+        const Foam::RASModels::v2f<compressibleMomentumTransportModel>* v2fModelPtr_;
 
     // Private Member Functions
 
@@ -91,6 +118,9 @@ class buoyancyTurbSource
         //- Apply buoyancyTurbSource to epsilon field
         void buoyancyTurbSourceEpsilon(const volScalarField& rho, fvMatrix<scalar>& eqn) const;
 
+        //- Apply buoyancyTurbSource to epsilon field
+        void buoyancyTurbSourceEpsilon_v2f(const volScalarField& rho, fvMatrix<scalar>& eqn) const;
+
         //- Apply buoyancyTurbSource to omega field
         void buoyancyTurbSourceOmega(const volScalarField& rho, fvMatrix<scalar>& eqn) const;
 
@@ -99,6 +129,9 @@ class buoyancyTurbSource
 
         //- Apply buoyancyTurbSource to f field
         void buoyancyTurbSourcef(const volScalarField& rho, fvMatrix<scalar>& eqn) const;
+
+        tmp<volScalarField> TsLocal() const;
+        tmp<volScalarField> LsLocal() const;
 
 public:
 
@@ -125,11 +158,12 @@ public:
         /* virtual void addSup(fvMatrix<scalar>& eqn, const word& fieldName) const override; */
         virtual void addSup(
                 const volScalarField& rho,
-                fvMatrix<scalar>& eqn, 
-                const word& fieldName) const override;
+                const volScalarField& k,
+                fvMatrix<scalar>& eqn
+    ) const override;
 
         //- Return the list of fields for which the fvModel adds source term
-        virtual wordList addSupFields() const override;
+        virtual wordList addSupFields() const ;
 
         // Mesh changes
 
