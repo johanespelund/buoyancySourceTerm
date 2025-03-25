@@ -245,32 +245,32 @@ void Foam::fv::buoyancyTurbSource::addSup(
 
     word fieldName = field.name();
     /* Info << "addSup: Adding buoyancy source to " << fieldName << " equation." << endl; */
-    Info << "   addSup: fieldName: " << fieldName << endl;
-    Info << "   eqn.dimensions: " << eqn.dimensions() << endl;
-    Info << "   eqn.psi().dimensions: " << eqn.psi().dimensions() << endl;
+    /* Info << "   addSup: fieldName: " << fieldName << endl; */
+    /* Info << "   eqn.dimensions: " << eqn.dimensions() << endl; */
+    /* Info << "   eqn.psi().dimensions: " << eqn.psi().dimensions() << endl; */
     if (fieldName == "k")
     {
-        Info << "   addSup: Adding buoyancy source to k equation." << endl;
+        /* Info << "   addSup: Adding buoyancy source to k equation." << endl; */
         buoyancyTurbSourceK(rho, eqn);
     }
     else if (isEpsilon_ && fieldName == "epsilon" && !isv2f_)
     {
-        Info << "   addSup: Adding buoyancy source to epsilon equation." << endl;
+        /* Info << "   addSup: Adding buoyancy source to epsilon equation." << endl; */
         buoyancyTurbSourceEpsilon(rho, eqn);
     }
     else if (!isEpsilon_ && fieldName == "omega")
     {
-        Info << "   addSup: Adding buoyancy source to omega equation." << endl;
+        /* Info << "   addSup: Adding buoyancy source to omega equation." << endl; */
         buoyancyTurbSourceOmega(rho, eqn);
     }
     else if (isv2f_ && fieldName == "f")
     {
-        Info << "   addSup: Adding buoyancy source to f equation." << endl;
+        /* Info << "   addSup: Adding buoyancy source to f equation." << endl; */
         buoyancyTurbSourcef(rho, eqn);
     }
     else if (isv2f_ && fieldName == "epsilon")
     {
-        Info << "   addSup: Adding buoyancy source to epsilon equation." << endl;
+        /* Info << "   addSup: Adding buoyancy source to epsilon equation." << endl; */
         buoyancyTurbSourceEpsilon_v2f(rho, eqn);
     }
     else
@@ -290,7 +290,7 @@ Foam::wordList Foam::fv::buoyancyTurbSource::addSupFields() const
 {
     wordList fields;
 
-    Info << "addSupFields: isEpsilon = " << isEpsilon_ << endl;
+    /* Info << "addSupFields: isEpsilon = " << isEpsilon_ << endl; */
 
     if (isEpsilon_ && !onlyApplyToK_)
     {
@@ -309,7 +309,7 @@ Foam::wordList Foam::fv::buoyancyTurbSource::addSupFields() const
     }
 
     fields.append("k");
-    Info << "   fields: " << fields << endl;
+    /* Info << "   fields: " << fields << endl; */
 
     return fields;
 }
