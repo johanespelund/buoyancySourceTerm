@@ -85,7 +85,7 @@ class buoyancyTurbSource
         bool isv2f_;
 
         //- Flags indicating if source term should be applied to fields if found
-        bool k_, epsilon_, omega_, f_, v2_;
+        bool k_, epsilon_, omega_, f_;
 
         //- Inverse turbulent Prandtl number
         scalar Cg_; 
