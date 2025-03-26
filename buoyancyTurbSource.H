@@ -84,8 +84,8 @@ class buoyancyTurbSource
         //- Flag indicating if the v2f model is used
         bool isv2f_;
 
-        //- Flag indicating if source term should only be added to k eqn.
-        bool onlyApplyToK_; 
+        //- Flags indicating if source term should be applied to fields if found
+        bool k_, epsilon_, omega_, f_, v2_;
 
         //- Inverse turbulent Prandtl number
         scalar Cg_; 
