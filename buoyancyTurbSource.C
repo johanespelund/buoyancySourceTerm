@@ -76,12 +76,17 @@ Foam::tmp<Foam::volScalarField> Foam::fv::buoyancyTurbSource::B(const volScalarF
 
     // SMALL value with epsilon dims
     const dimensionedScalar eps0 = dimensionedScalar("eps0", dimEnergy/dimTime/dimMass, small);
+    const dimensionedScalar k0 = dimensionedScalar("k0", dimEnergy/dimMass, small);
 
     // Turbulent Reynolds number
     /* const volScalarField Rt = pow(turbulence_.k(),2)/(turbulence_.epsilon()*turbulence_.nu()); */
     /* const volScalarField fG = ( 1 - exp(-pow(Rt/12,3))) * (1 + 10/pow(Rt,3.25)); */
 
     /* const dimensionedScalar epsilonMin(epsilon.dimensions(), small); */
+    /* Info << " max/min(nut / (Cmu*k*k/epsilon))" << endl; */
+    /* Info << max(turbulence_.nut() / (0.09*turbulence_.k()*turbulence_.k()/turbulence_.epsilon())) << " "; */
+    /* Info << min(turbulence_.nut() / (0.09*turbulence_.k()*turbulence_.k()/turbulence_.epsilon())) << endl; */
+    /* turbulence_.correct(); */
 
     return tmp<Foam::volScalarField> 
     (
@@ -97,10 +102,13 @@ Foam::tmp<Foam::volScalarField> Foam::fv::buoyancyTurbSource::B(const volScalarF
             ),
             THFM_ == "SGDH" ? 
             // Formulation from [3]
-            turbulence_.nut() * Cg_ * (g & fvc::grad(rho))
+            -turbulence_.nut() * Cg_ * (g & fvc::grad(rho))
+            /* -0.09*turbulence_.k()*turbulence_.k()/(turbulence_.epsilon() + eps0) * Cg_ * (g & fvc::grad(rho)) */ // Corresponding to buoyantKEpsilon
             :   
             // Formulation from [2]
-            Cphi_*  Cg_*(turbulence_.k()/(turbulence_.epsilon() + eps0))*(g & (turbulence_.sigma() & fvc::grad(rho))) // /(epsilon + SMALL) // GGDH
+            // Note: sigma() returns the negative Reynolds stress tensor, which cancels the negative sign in the GGDH formulation
+            -(3/2)*Cg_*(turbulence_.nut()/(turbulence_.k() + k0))*((turbulence_.sigma() & fvc::grad(rho)) & g) 
+            /* Cphi_*  Cg_*(turbulence_.k()/(turbulence_.epsilon() + eps0))*(g & (turbulence_.sigma() & fvc::grad(rho))) // /(epsilon + SMALL) // GGDH */
         )
     );
 }
@@ -133,7 +141,8 @@ void Foam::fv::buoyancyTurbSource::buoyancyTurbSourceEpsilon(const volScalarFiel
     const volScalarField _B = B(rho);
 
 
-    eqn -= fvm::SuSp(C1*tanh(mag(v/u))*_B/(k + k0), eqn.psi());
+    /* eqn -= fvm::SuSp(-C1*tanh(mag(v/u))*_B/(k + k0), eqn.psi()); */
+    eqn -= fvm::SuSp(-C1*_B/(k + k0), eqn.psi());
 }
 
 Foam::tmp<Foam::volScalarField> Foam::fv::buoyancyTurbSource::TsLocal() const
@@ -195,7 +204,7 @@ void Foam::fv::buoyancyTurbSource::buoyancyTurbSourceOmega(const volScalarField&
     const scalar gamma = 0.52;
     const volScalarField _B = B(rho);
 
-    eqn -= gamma  / (nut + dimensionedScalar(nut.dimensions(), small)) * _B;
+    eqn += gamma  / (nut + dimensionedScalar(nut.dimensions(), small)) * _B;
 }
 
 
@@ -212,7 +221,7 @@ void Foam::fv::buoyancyTurbSource::buoyancyTurbSourceK(const volScalarField&rho,
     {
         _B().write();
     }
-    eqn -= fvm::SuSp(_B/(k + k0), k);
+    eqn += -fvm::SuSp(-_B/(k + k0), k);
     /* eqn -= fvm::SuSp(_B, k); */
 }
 
