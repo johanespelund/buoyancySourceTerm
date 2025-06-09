@@ -48,7 +48,6 @@ void Foam::fv::buoyancyTurbSource::readCoeffs()
     Cg_ = coeffs().lookupOrDefault<scalar>("Cg", 1/0.85);
     Cphi_ = coeffs().lookupOrDefault<scalar>("Cphi", 0.3); // Default value from [4]
     THFM_ = coeffs().lookupOrDefault<word>("THFM", "SGDH");
-
     k_ = coeffs().lookupOrDefault<bool>("k", true); 
     epsilon_ = coeffs().lookupOrDefault<bool>("epsilon", true);
     omega_ = coeffs().lookupOrDefault<bool>("omega", false);
@@ -106,14 +105,11 @@ Foam::tmp<Foam::volScalarField> Foam::fv::buoyancyTurbSource::B(const volScalarF
             /* -0.09*turbulence_.k()*turbulence_.k()/(turbulence_.epsilon() + eps0) * Cg_ * (g & fvc::grad(rho)) */ // Corresponding to buoyantKEpsilon
             :   
             // Formulation from [2]
-            // Note: sigma() returns the negative Reynolds stress tensor, which cancels the negative sign in the GGDH formulation
             -(3/2)*Cg_*(turbulence_.nut()/(turbulence_.k() + k0))*((turbulence_.sigma() & fvc::grad(rho)) & g) 
             /* Cphi_*  Cg_*(turbulence_.k()/(turbulence_.epsilon() + eps0))*(g & (turbulence_.sigma() & fvc::grad(rho))) // /(epsilon + SMALL) // GGDH */
         )
     );
 }
-
-
 
 
 // Apply source term to epsilon equation
