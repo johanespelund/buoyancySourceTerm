@@ -85,7 +85,7 @@ class buoyancyTurbSource
         bool isv2f_;
 
         //- Flags indicating if source term should be applied to fields if found
-        bool k_, epsilon_, omega_, f_;
+        bool k_, epsilon_, omega_;
 
         //- Inverse turbulent Prandtl number
         scalar Cg_; 
@@ -112,8 +112,7 @@ class buoyancyTurbSource
         void readCoeffs();
 
         //- Compute buoyancy production term for incompressible cases [m2/s3]
-        tmp<volScalarField> B(const volScalarField& rho) const;
-        /* volScalarField B() const; */
+        tmp<volScalarField> Gb(const volScalarField& rho) const;
 
         //- Apply buoyancyTurbSource to epsilon field
         void buoyancyTurbSourceEpsilon(const volScalarField& rho, fvMatrix<scalar>& eqn) const;
