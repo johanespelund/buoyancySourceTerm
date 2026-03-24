@@ -2,7 +2,7 @@
   =========                 |
   \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox
    \\    /   O peration     | Website:  https://openfoam.org
-    \\  /    A nd           | Copyright (C) 2015-2023 OpenFOAM Foundation
+    \\  /    A nd           | Copyright (C) 2024 OpenFOAM Foundation
      \\/     M anipulation  |
 -------------------------------------------------------------------------------
 License
@@ -12,6 +12,14 @@ License
     under the terms of the GNU General Public License as published by
     the Free Software Foundation, either version 3 of the License, or
     (at your option) any later version.
+
+    OpenFOAM is distributed in the hope that it will be useful, but WITHOUT
+    ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+    FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+    for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with OpenFOAM.  If not, see <http://www.gnu.org/licenses/>.
 
 \*---------------------------------------------------------------------------*/
 
@@ -45,31 +53,32 @@ namespace fv
 
 void Foam::fv::buoyancyTurbSource::readCoeffs()
 {
-    Cg_ = coeffs().lookupOrDefault<scalar>("Cg", 1/0.85);
-    Cphi_ = coeffs().lookupOrDefault<scalar>("Cphi", 0.3); // Default value from [4]
+    Cg_ = coeffs().lookupOrDefault<scalar>("Cg", scalar(1)/0.85);
+    Cphi_ = coeffs().lookupOrDefault<scalar>("Cphi", 0.3);
     THFM_ = coeffs().lookupOrDefault<word>("THFM", "SGDH");
-    k_ = coeffs().lookupOrDefault<bool>("k", true); 
+    k_ = coeffs().lookupOrDefault<bool>("k", true);
     epsilon_ = coeffs().lookupOrDefault<bool>("epsilon", true);
     omega_ = coeffs().lookupOrDefault<bool>("omega", false);
-    
 
-    Info << "    Cg (1/Prt): " << Cg_ << " (" << 1/Cg_ << ")" << endl;
-    Info << "    THFM: " << THFM_ << endl;
-    Info << "    Applying source to following fields:" << endl;
-    Info << "      k: " << k_ << endl;
-    Info << "      epsilon: " << epsilon_ << endl;
-    Info << "      omega: " << omega_ << endl;
+    // Default v2_ to true when a v2-f model is detected
+    v2_ = coeffs().lookupOrDefault<bool>("v2", isv2f_);
 
+    Info<< "    Cg (1/Prt): " << Cg_ << " (" << 1/Cg_ << ")" << endl;
+    Info<< "    THFM: " << THFM_ << endl;
+    Info<< "    Applying source to the following fields:" << endl;
+    Info<< "      k: " << k_ << endl;
+    Info<< "      epsilon: " << epsilon_ << endl;
+    Info<< "      omega: " << omega_ << endl;
+    Info<< "      v2: " << v2_ << endl;
 }
 
-Foam::tmp<Foam::volScalarField> Foam::fv::buoyancyTurbSource::Gb(const volScalarField&rho) const
+
+Foam::tmp<Foam::volScalarField>
+Foam::fv::buoyancyTurbSource::Gb(const volScalarField& rho) const
 {
+    const dimensionedScalar k0("k0", dimEnergy/dimMass, small);
 
-    const uniformDimensionedVectorField& g = mesh().lookupObject<uniformDimensionedVectorField>("g");
-
-    const dimensionedScalar k0 = dimensionedScalar("k0", dimEnergy/dimMass, small);
-
-    return tmp<Foam::volScalarField> 
+    return tmp<Foam::volScalarField>
     (
         new Foam::volScalarField
         (
@@ -81,108 +90,110 @@ Foam::tmp<Foam::volScalarField> Foam::fv::buoyancyTurbSource::Gb(const volScalar
                 IOobject::NO_READ,
                 IOobject::NO_WRITE
             ),
-            THFM_ == "SGDH" ? 
-            // Formulation from [3]
-            -turbulence_.nut() * Cg_ * (g & fvc::grad(rho))
-            :   
-            // Formulation from [2]
-            -(3/2)*Cg_*(turbulence_.nut()/(turbulence_.k() + k0))*((turbulence_.sigma() & fvc::grad(rho)) & g) 
+            THFM_ == "SGDH"
+          ?
+            // SGDH formulation, Ref. [2]
+            -turbulence_.nut()*Cg_*(g_ & fvc::grad(rho))
+          :
+            // GGDH formulation, Ref. [1]
+            -1.5*Cg_*(turbulence_.nut()/(turbulence_.k() + k0))
+           *((turbulence_.sigma() & fvc::grad(rho)) & g_)
         )
     );
 }
 
 
-// Apply source term to epsilon equation
-void Foam::fv::buoyancyTurbSource::buoyancyTurbSourceEpsilon(const volScalarField&rho, fvMatrix<scalar>& eqn) const
+void Foam::fv::buoyancyTurbSource::buoyancyTurbSourceEpsilon
+(
+    const volScalarField& rho,
+    fvMatrix<scalar>& eqn
+) const
 {
-    const dictionary& turbDict = turbulence_.coeffDict();
-    const dimensionedScalar C1(turbDict.lookupOrDefault<scalar>("C1", 1.44));
+    const dimensionedScalar C1
+    (
+        "C1",
+        dimless,
+        turbulence_.coeffDict().lookupOrDefault<scalar>("C1", 1.44)
+    );
     const volVectorField& U = turbulence_.U();
     const volScalarField& k = turbulence_.k();
-    auto k0 = dimensionedScalar("k0", k.dimensions(), small);
+    const dimensionedScalar k0(k.dimensions(), small);
 
-    // (BMA:Eq. 9)
+    // Stratification angle factor C3 = tanh(|u_parallel / u_perp|), Ref. [3]
     const vector gHat(g_.value()/mag(g_.value()));
- 
-    volScalarField v(gHat & U);
-    volScalarField u
+
+    const volScalarField uParallel(gHat & U);
+    const volScalarField uPerp
     (
-        mag(U - gHat*v)
+        mag(U - gHat*uParallel)
       + dimensionedScalar(dimVelocity, small)
     );
- 
-    const volScalarField _Gb = Gb(rho);
 
-    eqn -= fvm::SuSp(-C1*tanh(mag(v/u))*_Gb/(k + k0), eqn.psi());
-    /* eqn -= fvm::SuSp(-C1*_Gb/(k + k0), eqn.psi()); */
+    const volScalarField GbField(Gb(rho));
+
+    eqn -= fvm::SuSp(-C1*tanh(mag(uParallel/uPerp))*GbField/(k + k0), eqn.psi());
 }
 
 
-
-// Apply source term to omega equation
-void Foam::fv::buoyancyTurbSource::buoyancyTurbSourceOmega(const volScalarField&rho, fvMatrix<scalar>& eqn) const
+void Foam::fv::buoyancyTurbSource::buoyancyTurbSourceOmega
+(
+    const volScalarField& rho,
+    fvMatrix<scalar>& eqn
+) const
 {
     const volScalarField& nut = turbulence_.nut();
-    const scalar gamma = 0.52;
-    const volScalarField _Gb = Gb(rho);
+    const dimensionedScalar nut0(nut.dimensions(), small);
+    const volScalarField& omega = eqn.psi();
+    const dimensionedScalar omega0(omega.dimensions(), small);
 
-    eqn += gamma  / (nut + dimensionedScalar(nut.dimensions(), small)) * _Gb;
+    const scalar gamma
+    (
+        turbulence_.coeffDict().lookupOrDefault<scalar>("gamma", scalar(5)/9)
+    );
+
+    const volScalarField GbField(Gb(rho));
+
+    eqn -= fvm::SuSp(-gamma/(nut + nut0)*GbField/(omega + omega0), omega);
 }
 
 
-// Apply source term to k equation
-void Foam::fv::buoyancyTurbSource::buoyancyTurbSourceK(const volScalarField&rho, fvMatrix<scalar>& eqn) const
+void Foam::fv::buoyancyTurbSource::buoyancyTurbSourceK
+(
+    const volScalarField& rho,
+    fvMatrix<scalar>& eqn
+) const
 {
     const volScalarField& k = eqn.psi();
     const dimensionedScalar k0(k.dimensions(), small);
-    const volScalarField _Gb = Gb(rho);
+    const volScalarField GbField(Gb(rho));
 
     if (mesh().time().writeTime())
     {
-        _Gb().write();
+        GbField.write();
     }
 
-    // Add source term using automatic treatment of explicit/implicit formulation
-    // Ref. discussion here: 
-    // https://www.cfd-online.com/Forums/openfoam-programming-development/182107-fvmatrix-fvoptions-susp-automatic-implicit-explicit-source-term-treatment.html
+    eqn -= fvm::SuSp(-GbField/(k + k0), k);
+}
 
-    eqn += -fvm::SuSp(-_Gb/(k + k0), k);
+
+void Foam::fv::buoyancyTurbSource::buoyancyTurbSourcev2
+(
+    const volScalarField& rho,
+    fvMatrix<scalar>& eqn
+) const
+{
+    const volScalarField& k = turbulence_.k();
+    const dimensionedScalar k0(k.dimensions(), small);
+    const volScalarField& v2 = eqn.psi();
+    const volScalarField GbField(Gb(rho));
+
+    // Buoyancy contribution to v2 scaled by the v2/k stress ratio,
+    // using SuSp for implicit treatment under stable stratification (Gb < 0)
+    eqn -= fvm::SuSp(-GbField/(k + k0), v2);
 }
 
 
 // * * * * * * * * * * * * * * * Member Functions  * * * * * * * * * * * * * //
-
-void Foam::fv::buoyancyTurbSource::addSup(
-                const volScalarField& rho,
-  const volScalarField& field,
-  fvMatrix<scalar>& eqn
-) const
-{
-
-    word fieldName = field.name();
-    if (fieldName == "k" && k_)
-    {
-        buoyancyTurbSourceK(rho, eqn);
-    }
-    else if (!isv2f_ && fieldName == "epsilon" && epsilon_)
-    {
-        buoyancyTurbSourceEpsilon(rho, eqn);
-    }
-    else if (fieldName == "omega" && omega_)
-    {
-        buoyancyTurbSourceOmega(rho, eqn);
-    }
-    else if (isv2f_) 
-    {
-        FatalErrorInFunction
-            << "buoyancyTurbSource can not be used with v2f." << exit(FatalError);
-    }
-    else
-    {
-        FatalErrorInFunction
-            << "Unsupported field name: " << fieldName << exit(FatalError);
-    }
-}
 
 Foam::wordList Foam::fv::buoyancyTurbSource::addSupFields() const
 {
@@ -190,23 +201,53 @@ Foam::wordList Foam::fv::buoyancyTurbSource::addSupFields() const
 
     if (k_)
     {
-      fields.append("k");
+        fields.append("k");
     }
     if (isEpsilon_ && epsilon_)
     {
-      fields.append("epsilon");
+        fields.append("epsilon");
     }
     if (!isEpsilon_ && omega_)
     {
-      fields.append("omega");
+        fields.append("omega");
+    }
+    if (isv2f_ && v2_)
+    {
+        fields.append("v2");
     }
 
     return fields;
 }
 
 
+void Foam::fv::buoyancyTurbSource::addSup
+(
+    const volScalarField& rho,
+    const volScalarField& field,
+    fvMatrix<scalar>& eqn
+) const
+{
+    const word& fieldName = field.name();
 
-// Constructor with turbulence model loading and field detection
+    if (fieldName == "k" && k_)
+    {
+        buoyancyTurbSourceK(rho, eqn);
+    }
+    else if (fieldName == "epsilon" && epsilon_)
+    {
+        buoyancyTurbSourceEpsilon(rho, eqn);
+    }
+    else if (fieldName == "omega" && omega_)
+    {
+        buoyancyTurbSourceOmega(rho, eqn);
+    }
+    else if (fieldName == "v2" && v2_)
+    {
+        buoyancyTurbSourcev2(rho, eqn);
+    }
+}
+
+
 Foam::fv::buoyancyTurbSource::buoyancyTurbSource
 (
     const word& name,
@@ -216,13 +257,10 @@ Foam::fv::buoyancyTurbSource::buoyancyTurbSource
 )
 :
     fvModel(name, modelType, mesh, dict),
-    /*beta_(dimensionedScalar("beta", dimless/dimTemperature, -1)),*/
     g_(mesh.lookupObject<uniformDimensionedVectorField>("g")),
     turbulence_(mesh.lookupType<compressibleMomentumTransportModel>())
 {
-    readCoeffs();
-
-    // Detect if epsilon or omega is present
+    // Detect if epsilon- or omega-based model is present
     if (mesh.foundObject<volScalarField>("epsilon"))
     {
         isEpsilon_ = true;
@@ -238,27 +276,22 @@ Foam::fv::buoyancyTurbSource::buoyancyTurbSource
             << "buoyancyTurbSource requires an omega- or epsilon-based model."
             << exit(FatalError);
     }
-    // Check for v2 and f fields to set isv2f_.
-    if (mesh.foundObject<volScalarField>("v2") &&
-        mesh.foundObject<volScalarField>("f"))
-    {
-        isv2f_ = true;
-        using Foam::RASModels::v2f;  // ensure namespace is available
-        v2fModelPtr_ =
-            dynamic_cast<const v2f<compressibleMomentumTransportModel>*>(&turbulence_);
-        Info << "   Found v2 and f fields. Assuming v2-f model." << endl;
 
-    }
-    else
+    // Detect v2-f model by checking for v2 and f fields
+    isv2f_ =
+        mesh.foundObject<volScalarField>("v2")
+     && mesh.foundObject<volScalarField>("f");
+
+    if (isv2f_)
     {
-        v2fModelPtr_ = nullptr;
-        isv2f_ = false;
+        Info<< "    Found v2 and f fields. Assuming v2-f model." << endl;
     }
-    read(dict);
+
+    readCoeffs();
 }
 
 
-// Implementing pure virtual functions from fvModel as no-op or pass-through
+// * * * * * * * * * * * * * * Member Functions * * * * * * * * * * * * * * //
 
 bool Foam::fv::buoyancyTurbSource::movePoints()
 {
@@ -292,4 +325,3 @@ bool Foam::fv::buoyancyTurbSource::read(const dictionary& dict)
 }
 
 // ************************************************************************* //
-
