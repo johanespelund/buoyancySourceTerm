@@ -59,12 +59,14 @@ void Foam::fv::buoyancyTurbSource::readCoeffs()
     k_ = coeffs().lookupOrDefault<bool>("k", true);
     epsilon_ = coeffs().lookupOrDefault<bool>("epsilon", true);
     omega_ = coeffs().lookupOrDefault<bool>("omega", false);
+    tanhLimiter_ = coeffs().lookupOrDefault<bool>("tanhLimiter", true);
 
     // Default v2_ to true when a v2-f model is detected
     v2_ = coeffs().lookupOrDefault<bool>("v2", isv2f_);
 
     Info<< "    Cg (1/Prt): " << Cg_ << " (" << 1/Cg_ << ")" << endl;
     Info<< "    THFM: " << THFM_ << endl;
+    Info<< "    tanhLimiter: " << tanhLimiter_ << endl;
     Info<< "    Applying source to the following fields:" << endl;
     Info<< "      k: " << k_ << endl;
     Info<< "      epsilon: " << epsilon_ << endl;
@@ -115,23 +117,30 @@ void Foam::fv::buoyancyTurbSource::buoyancyTurbSourceEpsilon
         dimless,
         turbulence_.coeffDict().lookupOrDefault<scalar>("C1", 1.44)
     );
-    const volVectorField& U = turbulence_.U();
     const volScalarField& k = turbulence_.k();
     const dimensionedScalar k0(k.dimensions(), small);
 
-    // Stratification angle factor C3 = tanh(|u_parallel / u_perp|), Ref. [3]
-    const vector gHat(g_.value()/mag(g_.value()));
-
-    const volScalarField uParallel(gHat & U);
-    const volScalarField uPerp
-    (
-        mag(U - gHat*uParallel)
-      + dimensionedScalar(dimVelocity, small)
-    );
-
     const volScalarField GbField(Gb(rho));
 
-    eqn -= fvm::SuSp(-C1*tanh(mag(uParallel/uPerp))*GbField/(k + k0), eqn.psi());
+    if (tanhLimiter_)
+    {
+        // Stratification angle factor C3 = tanh(|u_parallel / u_perp|), Ref. [3]
+        const volVectorField& U = turbulence_.U();
+        const vector gHat(g_.value()/mag(g_.value()));
+
+        const volScalarField uParallel(gHat & U);
+        const volScalarField uPerp
+        (
+            mag(U - gHat*uParallel)
+          + dimensionedScalar(dimVelocity, small)
+        );
+
+        eqn -= fvm::SuSp(-C1*tanh(mag(uParallel/uPerp))*GbField/(k + k0), eqn.psi());
+    }
+    else
+    {
+        eqn -= fvm::SuSp(-C1*GbField/(k + k0), eqn.psi());
+    }
 }
 
 

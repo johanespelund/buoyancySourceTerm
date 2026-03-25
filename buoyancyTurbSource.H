@@ -33,6 +33,11 @@ Description
     The term is always added to the k equation. The user can choose to add
     the term to the epsilon, omega and v2 equations as well.
 
+    For the epsilon equation, a stratification angle factor
+    C3 = tanh(|u_parallel / u_perp|) (Ref. [3]) is applied by default.
+    This can be disabled by setting \c tanhLimiter to \c false in the
+    model dictionary.
+
     [1] Ince, N. Z., and B. E. Launder. 1989. "On the Computation of
         Buoyancy-Driven Turbulent Flows in Rectangular Enclosures."
         International Journal of Heat and Fluid Flow 10 (2): 110-17.
@@ -103,6 +108,10 @@ class buoyancyTurbSource
         //  Either SGDH (simple gradient diffusion hypothesis, default) or
         //  GGDH (generalised gradient diffusion hypothesis).
         word THFM_;
+
+        //- Flag: apply tanh limiter (stratification angle factor C3) in
+        //  the epsilon source term
+        bool tanhLimiter_;
 
         //- Gravitational acceleration [m/s^2]
         const uniformDimensionedVectorField& g_;
