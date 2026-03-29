@@ -13,8 +13,8 @@ optionally be added to the `epsilon`, `omega`, and `v2` equations as well.
 Make sure OpenFOAM v12 is installed and sourced.
 Create the installation directory, e.g.
 ```
-mkdir -p $FOAM_RUN/../src
-cd $FOAM_RUN/../src
+mkdir -p $WM_PROJECT_USER_DIR/src
+cd $WM_PROJECT_USER_DIR/src
 ```
 Clone repository and compile
 ```
