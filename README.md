@@ -46,7 +46,7 @@ FoamFile
 {
     format      ascii;
     class       dictionary;
-    location    "system";
+    location    "constant";
     object      fvModels;
 }
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
